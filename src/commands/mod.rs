@@ -1,4 +1,5 @@
 use crate::error::CadencyError;
+use crate::utils;
 use serenity::{
     async_trait,
     client::Context,
@@ -50,13 +51,49 @@ pub use stop::Stop;
 pub use tracks::Tracks;
 pub use urban::Urban;
 
+pub trait CadencyCommandConfig {
+    fn use_deferred() -> bool {
+        false
+    }
+}
+
 #[async_trait]
-pub trait CadencyCommand {
+pub trait CadencyCommandCatcher {
+    async fn catch<'a>(
+        ctx: &Context,
+        command: &'a mut ApplicationCommandInteraction,
+        err: CadencyError
+    ) -> Result<(), CadencyError> {
+        return match err {
+            CadencyError::Response => utils::create_response(ctx, command, ":x: **Something wen wrong**").await,
+            CadencyError::Join => utils::create_response(ctx, command, "").await
+
+        }
+    }
+}
+
+
+#[async_trait]
+pub trait CadencyCommand {    
     async fn register(ctx: &Context) -> Result<Command, serenity::Error>;
+    async fn cmd<'a>(
+        ctx: &Context,
+        command: &'a mut ApplicationCommandInteraction,
+    ) -> Result<(), CadencyError> {
+        if Self::use_deferred() {
+            utils::voice::create_deferred_response(ctx, command).await?;
+        };
+        match Self::execute(ctx, command).await {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                return Self::catch(ctx, command, err).await
+            }
+        }
+    }
     async fn execute<'a>(
         ctx: &Context,
         command: &'a mut ApplicationCommandInteraction,
-    ) -> Result<(), CadencyError>;
+    ) -> Result<(), CadencyError>;    
 }
 
 /// Submit global slash commands to the discord api.
